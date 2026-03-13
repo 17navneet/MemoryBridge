@@ -7,62 +7,79 @@ import FloatingAI from "../../components/FloatingAI";
 
 const RecognizePeople = () => {
 
-  const fileRef = useRef();
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
-  const [image,setImage] = useState(null);
-  const [loading,setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState("");
 
-  const handleImage = (e)=>{
+  // Start camera
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true
+      });
 
-    const file = e.target.files[0];
+      videoRef.current.srcObject = stream;
 
-    if(!file) return;
-
-    const reader = new FileReader();
-
-    reader.onload = ()=>{
-      setImage(reader.result);
-    };
-
-    reader.readAsDataURL(file);
+    } catch (err) {
+      alert("Camera access denied");
+      console.error(err);
+    }
   };
 
-  const handleSearch = async () => {
+  // Capture frame and send to backend
+  const recognize = async () => {
 
-    if(!image){
-      alert("Please upload a face image first");
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!video.srcObject) {
+      alert("Start camera first");
       return;
     }
 
-    try{
+    setLoading(true);
 
-      setLoading(true);
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
-      // TODO: replace with your backend API
-      console.log("Sending image to backend...");
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
 
-      /*
-      const res = await fetch("http://localhost:5000/recognize",{
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json"
-        },
-        body:JSON.stringify({ image })
-      });
+    canvas.toBlob(async (blob) => {
 
-      const data = await res.json();
-      console.log(data);
-      */
+      const formData = new FormData();
+      formData.append("image", blob, "capture.jpg");
 
-      setTimeout(()=>{
+      try {
+
+        const res = await fetch("http://localhost:5000/detect", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await res.json();
+
+        setResult(data.result);
         setLoading(false);
-        alert("Backend recognition will appear here");
-      },1000);
 
-    }catch(err){
-      console.error(err);
-      setLoading(false);
-    }
+        // voice output
+        if (data.speak) {
+          const speech = new SpeechSynthesisUtterance(data.speak);
+          speech.rate = 0.9;
+          window.speechSynthesis.speak(speech);
+        }
+
+      } catch (err) {
+
+        console.error(err);
+        setLoading(false);
+        alert("Backend error");
+
+      }
+
+    }, "image/jpeg");
   };
 
   return (
@@ -76,45 +93,47 @@ const RecognizePeople = () => {
 
       <main className="max-w-lg mx-auto px-4 py-8 text-center space-y-6">
 
-        {/* Upload Face */}
+        {/* Camera Preview */}
 
-        <button
-          onClick={()=>fileRef.current.click()}
-          className="w-44 h-44 border-2 border-dashed border-border rounded-xl flex items-center justify-center mx-auto bg-card shadow-soft"
-        >
+        <div className="w-64 h-64 mx-auto bg-card rounded-xl overflow-hidden shadow-soft">
 
-          {image ? (
-            <img src={image} className="w-full h-full object-cover rounded-xl"/>
-          ) : (
-            <Camera size={28}/>
-          )}
+          <video
+            ref={videoRef}
+            autoPlay
+            className="w-full h-full object-cover"
+          />
 
-        </button>
+        </div>
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleImage}
-        />
+        <canvas ref={canvasRef} className="hidden" />
 
-        <p className="text-muted-foreground text-sm">
-          Upload or capture a face
-        </p>
+        {/* Buttons */}
 
-        {/* Search Button */}
+        <div className="flex justify-center gap-4">
 
-        <button
-          onClick={handleSearch}
-          className="bg-primary text-white px-5 py-2 rounded-full flex items-center gap-2 mx-auto shadow-soft"
-        >
+          <button
+            onClick={startCamera}
+            className="bg-primary text-white px-4 py-2 rounded-full flex items-center gap-2"
+          >
+            <Camera size={16}/>
+            Start Camera
+          </button>
 
-          <Search size={16}/>
+          <button
+            onClick={recognize}
+            className="bg-green-500 text-white px-4 py-2 rounded-full flex items-center gap-2"
+          >
+            <Search size={16}/>
+            {loading ? "Recognizing..." : "Recognize"}
+          </button>
 
-          {loading ? "Searching..." : "Recognize Person"}
+        </div>
 
-        </button>
+        {result && (
+          <p className="text-lg font-medium">
+            Result: {result}
+          </p>
+        )}
 
       </main>
 
@@ -122,6 +141,7 @@ const RecognizePeople = () => {
       <BottomNav/>
 
     </div>
+
   );
 };
 
