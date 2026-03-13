@@ -10,47 +10,82 @@ const Signup = () => {
   const [email,setEmail] = useState("");
   const [password,setPassword] = useState("");
   const [role,setRole] = useState("patient");
-  const [photo,setPhoto] = useState(null);
+  const [photos,setPhotos] = useState([]);
 
   const handlePhoto = (e) => {
 
-    const file = e.target.files[0];
-    if(!file) return;
+    const files = Array.from(e.target.files).slice(0,3);
 
-    const reader = new FileReader();
+    const readers = [];
 
-    reader.onload = () => {
-      setPhoto(reader.result);
-    };
+    files.forEach(file => {
 
-    reader.readAsDataURL(file);
+      const reader = new FileReader();
+
+      reader.onload = () => {
+
+        readers.push(reader.result);
+
+        if(readers.length === files.length){
+          setPhotos(readers);
+        }
+
+      };
+
+      reader.readAsDataURL(file);
+
+    });
+
   };
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
 
-    if(!name || !email || !password) return;
+  if(!name || !email || !password) return;
 
-    const users =
-      JSON.parse(localStorage.getItem("memorybridge_users")) || [];
+  if(role === "patient" && photos.length === 0){
+    alert("Please upload at least one face photo");
+    return;
+  }
 
-    const newUser = {
-      id:crypto.randomUUID(),
-      name,
-      email,
-      password,
-      role,
-      photo
-    };
+  try{
 
-    users.push(newUser);
+    const formData = new FormData();
 
-    localStorage.setItem(
-      "memorybridge_users",
-      JSON.stringify(users)
+    formData.append("name", name);
+    formData.append("email", email);
+    formData.append("password", password);
+    formData.append("role", role);
+
+    // append photos
+    photos.forEach((photo, index) => {
+
+      const blob = fetch(photo)
+        .then(res => res.blob())
+        .then(blob => {
+          formData.append("photos", blob, `${name}_${index+1}.jpg`);
+        });
+
+    });
+
+    // wait for blob conversions
+    await Promise.all(
+      photos.map(async (photo, index)=>{
+        const blob = await fetch(photo).then(r=>r.blob());
+        formData.append("photos", blob, `${name}_${index+1}.jpg`);
+      })
     );
 
+    await fetch("http://localhost:5000/signup",{
+      method:"POST",
+      body:formData
+    });
+
     navigate("/login");
-  };
+
+  }catch(err){
+    console.error(err);
+  }
+};
 
   return (
 
@@ -96,18 +131,19 @@ const Signup = () => {
           <option value="caregiver">Caregiver</option>
         </select>
 
-        {/* Face Upload */}
+        {/* Face Upload for Patients */}
 
         {role === "patient" && (
 
           <label className="flex items-center gap-2 text-sm text-primary cursor-pointer">
 
             <Camera size={16}/>
-            Upload face photo
+            Upload up to 3 face photos
 
             <input
               type="file"
               accept="image/*"
+              multiple
               className="hidden"
               onChange={handlePhoto}
             />
@@ -116,11 +152,22 @@ const Signup = () => {
 
         )}
 
-        {photo && (
-          <img
-            src={photo}
-            className="w-20 h-20 object-cover rounded-full mx-auto"
-          />
+        {/* Photo Preview */}
+
+        {photos.length > 0 && (
+
+          <div className="flex gap-2 justify-center">
+
+            {photos.map((p,i)=>(
+              <img
+                key={i}
+                src={p}
+                className="w-16 h-16 object-cover rounded-full"
+              />
+            ))}
+
+          </div>
+
         )}
 
         <button

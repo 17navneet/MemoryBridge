@@ -37,25 +37,60 @@ const ManagePeople = () => {
     });
   };
 
-  const addPerson = () => {
+  const addPerson = async () => {
 
-    if(!name) return;
+  if (!name) return;
+
+  try {
+
+    const formData = new FormData();
+
+    formData.append("name", name);
+    formData.append("age", age);
+    formData.append("relation", relation);
+
+    // convert base64 images to blobs
+    for (let i = 0; i < photos.length; i++) {
+
+      const blob = await fetch(photos[i]).then(res => res.blob());
+
+      formData.append("photos", blob, `photo_${i}.jpg`);
+    }
+
+    const res = await fetch("http://localhost:5000/add_person", {
+      method: "POST",
+      body: formData
+    });
+
+    const data = await res.json();
+
+    console.log("Saved:", data);
 
     const newPerson = {
-      id: crypto.randomUUID(),
+      id: data.id,
       name,
       age,
       relation,
       photos
     };
 
-    setPeople([...people,newPerson]);
+    setPeople([...people, newPerson]);
 
     setName("");
     setAge("");
     setRelation("");
     setPhotos([]);
-  };
+
+    alert("Person added successfully!");
+
+  } catch (err) {
+
+    console.error("Error saving person:", err);
+    alert("Failed to save person");
+
+  }
+
+};
 
   const removePerson = (id)=>{
     setPeople(people.filter(p=>p.id!==id));
